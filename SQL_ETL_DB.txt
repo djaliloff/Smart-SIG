@@ -1,0 +1,140 @@
+-- =====================================================================
+-- STEP 1: SCHEMA & TABLE CREATION
+-- =====================================================================
+
+-- Initialize Schema
+DROP SCHEMA IF EXISTS app_data CASCADE;
+CREATE SCHEMA app_data;
+
+-- 1. ZONE_GEOGRAPHIQUE
+CREATE TABLE app_data."ZONE_GEOGRAPHIQUE" (
+    "Code_Zone" SERIAL PRIMARY KEY,
+    "Nom_Zone" VARCHAR(100),
+    "Surface_Zone" NUMERIC,
+    "Geometrie_Polygone" geometry(MultiPolygon, 32632)
+);
+
+-- 2. RX_ROUTIER
+CREATE TABLE app_data."RX_ROUTIER" (
+    "ID_Route" SERIAL PRIMARY KEY,
+    "Type_Route" VARCHAR(50),
+    "Vitesse_Max" INTEGER,
+    "Geometrie_Ligne" geometry(MultiLineString, 32632)
+);
+
+-- 3. POPULATION
+CREATE TABLE app_data."POPULATION" (
+    "ID_Population" SERIAL PRIMARY KEY,
+    "Annee_Recensement" INTEGER,
+    "Nombre_Habitants" INTEGER,
+    "Revenu_Moyen" NUMERIC,
+    "Tranche_Age" VARCHAR(50),
+    "Code_Zone" INTEGER REFERENCES app_data."ZONE_GEOGRAPHIQUE"("Code_Zone"),
+    "Geometrie_Point" geometry(Point, 32632) 
+);
+
+-- 4. LOCAL
+CREATE TABLE app_data."LOCAL" (
+    "ID_Local" SERIAL PRIMARY KEY,
+    "Adresse_Complete" VARCHAR(255),
+    "Surface_m2" NUMERIC,
+    "Prix_Loyer" NUMERIC,
+    "Flux_Pieton" INTEGER,
+    "Note_Visibilite" INTEGER,
+    "Presence_Parking" BOOLEAN,
+    "Est_Actif" BOOLEAN DEFAULT TRUE,
+    "Code_Zone" INTEGER REFERENCES app_data."ZONE_GEOGRAPHIQUE"("Code_Zone"),
+    "Geometrie_Point" geometry(Point, 32632)
+);
+
+-- 5. POINT_INTERET
+CREATE TABLE app_data."POINT_INTERET" (
+    "ID_POI" SERIAL PRIMARY KEY,
+    "Nom_POI" VARCHAR(255),
+    "Note_Attractivite" INTEGER,
+    "Code_Zone" INTEGER REFERENCES app_data."ZONE_GEOGRAPHIQUE"("Code_Zone"),
+    "Geometrie_Point" geometry(Point, 32632)
+);
+
+-- 6. BUFFER
+CREATE TABLE app_data."BUFFER" (
+    "ID_Buffer" SERIAL PRIMARY KEY,
+    "Type_Buffer" VARCHAR(50),
+    "Valeur_Seuil" NUMERIC,
+    "ID_Local" INTEGER REFERENCES app_data."LOCAL"("ID_Local"),
+    "Geometrie_Polygone" geometry(MultiPolygon, 32632)
+);
+
+-- 7. ACCESSIBILITE
+CREATE TABLE app_data."ACCESSIBILITE" (
+    "ID_Accessibilite" SERIAL PRIMARY KEY,
+    "Temps_Trajet_Min" NUMERIC,
+    "Distance_Reseau_m" NUMERIC,
+    "Mode_Transport" VARCHAR(50) DEFAULT 'Voiture',
+    "ID_Local" INTEGER REFERENCES app_data."LOCAL"("ID_Local"),
+    "ID_Population" INTEGER REFERENCES app_data."POPULATION"("ID_Population")
+);
+
+-- =====================================================================
+-- STEP 2: DATA MIGRATION (INSERT FROM OLD PUBLIC TABLES)
+-- =====================================================================
+
+-- 1. Migrate RX_ROUTIER
+INSERT INTO app_data."RX_ROUTIER" ("Type_Route", "Geometrie_Ligne")
+SELECT 'Principale', ST_Transform(ST_Multi(geom), 32632) FROM public."routes principale";
+
+INSERT INTO app_data."RX_ROUTIER" ("Type_Route", "Geometrie_Ligne")
+SELECT 'Secondaire', ST_Transform(ST_Multi(geom), 32632) FROM public."routes socondaires";
+
+INSERT INTO app_data."RX_ROUTIER" ("Type_Route", "Geometrie_Ligne")
+SELECT 'Type T', ST_Transform(ST_Multi(geom), 32632) FROM public."routes T";
+
+-- 2. Migrate ZONE_GEOGRAPHIQUE
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Quartier 1', ST_Transform(ST_Multi(geom), 32632) FROM public."quartier1";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Quartier 2', ST_Transform(ST_Multi(geom), 32632) FROM public."quartier2";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Quartier 3', ST_Transform(ST_Multi(geom), 32632) FROM public."quartier 3";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Quartier 4', ST_Transform(ST_Multi(geom), 32632) FROM public."quartier 4";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Quartier 5', ST_Transform(ST_Multi(geom), 32632) FROM public."quartier 5";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Ext Sud', ST_Transform(ST_Multi(geom), 32632) FROM public."extsud";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Ext Ouest', ST_Transform(ST_Multi(geom), 32632) FROM public."extouest";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'Université 3', ST_Transform(ST_Multi(geom), 32632) FROM public."université3";
+
+INSERT INTO app_data."ZONE_GEOGRAPHIQUE" ("Nom_Zone", "Geometrie_Polygone")
+SELECT 'UV Shap', ST_Transform(ST_Multi(geom), 32632) FROM public."uvshap";
+
+-- 3. Migrate POPULATION 
+-- (Assuming your old table has a column named "population" for the count)
+INSERT INTO app_data."POPULATION" ("Nombre_Habitants", "Geometrie_Point")
+SELECT population, ST_Transform(geom, 32632) FROM public."population";
+
+-- 4. Migrate LOCAL 
+-- Extracts Point from Polygon via ST_Centroid
+INSERT INTO app_data."LOCAL" ("Est_Actif", "Geometrie_Point")
+SELECT TRUE, ST_Transform(ST_Centroid(geom), 32632) FROM public."superette_polyg";
+
+-- 5. Migrate POINT_INTERET
+INSERT INTO app_data."POINT_INTERET" ("Nom_POI", "Geometrie_Point")
+SELECT 'POI Existant', ST_Transform(geom, 32632) FROM public."POI_F";
+
+-- 6. Migrate BUFFER
+INSERT INTO app_data."BUFFER" ("Type_Buffer", "Geometrie_Polygone")
+SELECT 'Buffer Concurrent', ST_Transform(ST_Multi(geom), 32632) FROM public."Buffer Concurents";
+
+-- 7. Migrate ACCESSIBILITE (Corrected)
+INSERT INTO app_data."ACCESSIBILITE" ("Temps_Trajet_Min", "Mode_Transport")
+SELECT "AA_MINS", "AA_MODE" FROM public."Accebilites_concurents";
